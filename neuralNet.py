@@ -26,12 +26,12 @@ def loadPositionFile(fileName):
 def convertFile(inputFile):
     positionData = loadPositionFile(inputFile)
     imagePosition = np.zeros((size,size,size))
-    #imageUp = np.zeros((size,size,size))
-    #imageDown = np.zeros((size,size,size))
-    #imageLeft = np.zeros((size,size,size))
-    #imageRight = np.zeros((size,size,size))
-    #imageForward = np.zeros((size,size,size))
-    #imageBack = np.zeros((size,size,size))
+    imageUp = np.zeros((size,size,size))
+    imageDown = np.zeros((size,size,size))
+    imageLeft = np.zeros((size,size,size))
+    imageRight = np.zeros((size,size,size))
+    imageForward = np.zeros((size,size,size))
+    imageBack = np.zeros((size,size,size))
 
     maxX = 0
     minX = 0
@@ -69,11 +69,33 @@ def convertFile(inputFile):
     offsetY = int((size - height*scale)/2.0)
     offsetZ = int((size - depth*scale)/2.0)
 
-    #prevPos = [0,0,0]
+    prevPos = [0,0,0]
     for line in positionData:
-        #xDif = line[0]-prevPos[0]
-        #yDif = line[0]-prevPos[0]
-        #zDif = line[0]-prevPos[0]
+        xDif = line[0]-prevPos[0]
+        yDif = line[1]-prevPos[1]
+        zDif = line[2]-prevPos[2]
+        totalDif = abs(xDif)+abs(yDif)+abs(zDif)
+
+        upValue = 0
+        downValue = 0
+        leftValue = 0
+        rightValue = 0
+        forwardValue = 0
+        backValue = 0
+
+        if totalDif > 0:
+            if xDif > 0:
+                rightValue = xDif/totalDif
+            else:
+                leftValue = abs(xDif)/totalDif
+            if yDif > 0:
+                upValue = yDif/totalDif
+            else:
+                downValue = abs(yDif)/totalDif
+            if zDif > 0:
+                forwardValue = zDif/totalDif
+            else:
+                backValue = abs(zDif)/totalDif
 
         x = round((line[0]-minX)*scale)
         y = round((line[1]-minY)*scale)
@@ -91,9 +113,32 @@ def convertFile(inputFile):
                         if(imagePosition[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < 1-(float(brushDist)/brushRadius)):
                             imagePosition[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = 1-(float(brushDist)/brushRadius)
 
+                        if(imageUp[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < upValue*(1-(float(brushDist)/brushRadius))):
+                            imageUp[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = upValue*(1-(float(brushDist)/brushRadius))
+                        if(imageDown[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < downValue*(1-(float(brushDist)/brushRadius))):
+                            imageDown[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = downValue*(1-(float(brushDist)/brushRadius))
+                        if(imageLeft[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < leftValue*(1-(float(brushDist)/brushRadius))):
+                            imageLeft[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = leftValue*(1-(float(brushDist)/brushRadius))
+                        if(imageRight[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < rightValue*(1-(float(brushDist)/brushRadius))):
+                            imageRight[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = rightValue*(1-(float(brushDist)/brushRadius))
+                        if(imageForward[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < forwardValue*(1-(float(brushDist)/brushRadius))):
+                            imageForward[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = forwardValue*(1-(float(brushDist)/brushRadius))
+                        if(imageBack[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < backValue*(1-(float(brushDist)/brushRadius))):
+                            imageBack[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = backValue*(1-(float(brushDist)/brushRadius))
+
     # Skip saving a file and convert into the one line format
     oneLineImage = []
-    for x in np.nditer(imagePosition):
+    for x in np.nditer(imageUp):
+        oneLineImage.append(x)
+    for x in np.nditer(imageDown):
+        oneLineImage.append(x)
+    for x in np.nditer(imageLeft):
+        oneLineImage.append(x)
+    for x in np.nditer(imageRight):
+        oneLineImage.append(x)
+    for x in np.nditer(imageForward):
+        oneLineImage.append(x)
+    for x in np.nditer(imageBack):
         oneLineImage.append(x)
     return oneLineImage 
 
@@ -157,7 +202,7 @@ def convertDirectory(pathFrom, pathTo):
 
 def main():
     
-    nInputNeurons = size*size*size
+    nInputNeurons = size*size*size*6
     nOutputNeurons = len(labels)
     
     trainingFiles = loadDirectory("train")    
