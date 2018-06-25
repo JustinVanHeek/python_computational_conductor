@@ -25,7 +25,13 @@ def loadPositionFile(fileName):
 
 def convertFile(inputFile):
     positionData = loadPositionFile(inputFile)
-    image = np.zeros((size,size,size))
+    imagePosition = np.zeros((size,size,size))
+    #imageUp = np.zeros((size,size,size))
+    #imageDown = np.zeros((size,size,size))
+    #imageLeft = np.zeros((size,size,size))
+    #imageRight = np.zeros((size,size,size))
+    #imageForward = np.zeros((size,size,size))
+    #imageBack = np.zeros((size,size,size))
 
     maxX = 0
     minX = 0
@@ -63,10 +69,15 @@ def convertFile(inputFile):
     offsetY = int((size - height*scale)/2.0)
     offsetZ = int((size - depth*scale)/2.0)
 
+    #prevPos = [0,0,0]
     for line in positionData:
+        #xDif = line[0]-prevPos[0]
+        #yDif = line[0]-prevPos[0]
+        #zDif = line[0]-prevPos[0]
+
         x = round((line[0]-minX)*scale)
-        y = round((line[0]-minY)*scale)
-        z = round((line[0]-minZ)*scale)
+        y = round((line[1]-minY)*scale)
+        z = round((line[2]-minZ)*scale)
         brushDist = 0
         for xBrush in range(-brushRadius,brushRadius+1):
             for yBrush in range(-brushRadius,brushRadius+1):
@@ -77,12 +88,12 @@ def convertFile(inputFile):
                             brushDist = abs(yBrush)
                         if abs(zBrush) > brushDist:
                             brushDist = abs(zBrush)
-                        if(image[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < 1-(float(brushDist)/brushRadius)):
-                            image[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = 1-(float(brushDist)/brushRadius)
+                        if(imagePosition[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < 1-(float(brushDist)/brushRadius)):
+                            imagePosition[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = 1-(float(brushDist)/brushRadius)
 
     # Skip saving a file and convert into the one line format
     oneLineImage = []
-    for x in np.nditer(image):
+    for x in np.nditer(imagePosition):
         oneLineImage.append(x)
     return oneLineImage 
 
