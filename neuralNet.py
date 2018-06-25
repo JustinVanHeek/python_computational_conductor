@@ -1,15 +1,17 @@
 import numpy as np
 import tensorflow as tf
 import os
+import math
 from sklearn.model_selection import train_test_split
 
 # Main Variables
 size            =   50      # Length of each dimension of the 3D image, larger = more detailed gestures
 brushRadius     =   4       # Radius that values are applied to the 3D image from source point, larger = more generalized
-nHiddenNeurons  =   100     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
+nHiddenNeurons  =   438     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
 nEpochs         =   20      # Number of training epochs for the neural network, larger = usually better accuracy
 labels          =   ["beat2","beat3","beat4"]        # Labels of the gestures to recognize (Note: training files should have the naming convention of [labelname]_##.csv
-                    
+maxSpeed        =   1000    # Maximum speed for normalization of the speed value
+iterPerSecond   =   0.025   # Speed at which the data is being recorded
 
 def loadPositionFile(fileName):
     print("Loading file " + fileName)
@@ -32,6 +34,7 @@ def convertFile(inputFile):
     imageRight = np.zeros((size,size,size))
     imageForward = np.zeros((size,size,size))
     imageBack = np.zeros((size,size,size))
+    imageSpeed = np.zeros((size,size,size))
 
     maxX = 0
     minX = 0
@@ -70,10 +73,12 @@ def convertFile(inputFile):
     offsetZ = int((size - depth*scale)/2.0)
 
     prevPos = [0,0,0]
+    prevScaledPos = [0,0,0]
     for line in positionData:
         xDif = line[0]-prevPos[0]
         yDif = line[1]-prevPos[1]
         zDif = line[2]-prevPos[2]
+        prevPos = line
         totalDif = abs(xDif)+abs(yDif)+abs(zDif)
 
         upValue = 0
@@ -82,6 +87,20 @@ def convertFile(inputFile):
         rightValue = 0
         forwardValue = 0
         backValue = 0
+        
+        unroundedX = (line[0]-minX)*scale
+        unroundedY = (line[1]-minX)*scale
+        unroundedZ = (line[2]-minX)*scale
+        unroundedXDif = unroundedX-prevScaledPos[0]
+        unroundedYDif = unroundedY-prevScaledPos[1]
+        unroundedZDif = unroundedZ-prevScaledPos[2]
+        speed = unroundedXDif*unroundedXDif+unroundedYDif*unroundedYDif+unroundedZDif*unroundedZDif
+        speed = math.sqrt(speed)
+        speed = speed/iterPerSecond
+        speedValue = speed/maxSpeed
+        prevScaledPos = [unroundedX,unroundedY,unroundedZ]
+        if speedValue > 1:
+            speedValue = 1
 
         if totalDif > 0:
             if xDif > 0:
@@ -96,6 +115,8 @@ def convertFile(inputFile):
                 forwardValue = zDif/totalDif
             else:
                 backValue = abs(zDif)/totalDif
+
+        #print("Speed = "+str(speed)+" at up:"+str(upValue)+" down: "+str(downValue)+" left: "+str(leftValue)+" right: "+str(rightValue)+" forward: "+str(forwardValue)+" back: "+str(backValue))
 
         x = round((line[0]-minX)*scale)
         y = round((line[1]-minY)*scale)
@@ -126,6 +147,9 @@ def convertFile(inputFile):
                         if(imageBack[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < backValue*(1-(float(brushDist)/brushRadius))):
                             imageBack[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = backValue*(1-(float(brushDist)/brushRadius))
 
+                        if(imageSpeed[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] < speedValue*(1-(float(brushDist)/brushRadius))):
+                            imageSpeed[x+offsetX+xBrush][y+offsetY+yBrush][z+offsetZ+zBrush] = speedValue*(1-(float(brushDist)/brushRadius))
+
     # Skip saving a file and convert into the one line format
     oneLineImage = []
     for x in np.nditer(imageUp):
@@ -140,6 +164,9 @@ def convertFile(inputFile):
         oneLineImage.append(x)
     for x in np.nditer(imageBack):
         oneLineImage.append(x)
+    for x in np.nditer(imageSpeed):
+        oneLineImage.append(x)
+
     return oneLineImage 
 
 
@@ -202,7 +229,7 @@ def convertDirectory(pathFrom, pathTo):
 
 def main():
     
-    nInputNeurons = size*size*size*6
+    nInputNeurons = size*size*size*7
     nOutputNeurons = len(labels)
     
     trainingFiles = loadDirectory("train")    
