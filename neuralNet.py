@@ -2,19 +2,21 @@ import numpy as np
 import tensorflow as tf
 import os
 import math
+import random
 from sklearn.model_selection import train_test_split
 
 # Main Variables
 size            =   50      # Length of each dimension of the 3D image, larger = more detailed gestures
 brushRadius     =   4       # Radius that values are applied to the 3D image from source point, larger = more generalized
-nHiddenNeurons  =   438     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
-nEpochs         =   20      # Number of training epochs for the neural network, larger = usually better accuracy
+nHiddenNeurons  =   400     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
+nEpochs         =   25      # Number of training epochs for the neural network, larger = usually better accuracy
 labels          =   ["beat2","beat3","beat4"]        # Labels of the gestures to recognize (Note: training files should have the naming convention of [labelname]_##.csv
 maxSpeed        =   1000    # Maximum speed for normalization of the speed value
 iterPerSecond   =   0.025   # Speed at which the data is being recorded
+nFolds          =   3       # Number of cross validation folds
 
 def loadPositionFile(fileName):
-    print("Loading file " + fileName)
+    #print("Loading file " + fileName)
     lines = [line.rstrip('\n') for line in open(fileName)]
     data = []
     for line in lines:
@@ -225,62 +227,208 @@ def convertDirectory(pathFrom, pathTo):
             for item in data[:-1]:
                 file.write(str(item)+",")
             file.write(str(data[-1])+"\n")
+
+def splitDataset(directory, percent):
+    files = os.listdir(directory)
+    beats = []
+    count = int(len(files)/len(labels))
+    for i in range(0,len(labels)):
+        beats.append(files[i*count:(i+1)*count])
+    splitUpTo = count*percent
+    trainBeats = []
+    testBeats = []
+    numUnsorted = count
+    while numUnsorted > splitUpTo:
+        idx = random.randint(0,numUnsorted-1)
+        trainBeats.append(directory + "/" + beats[0][idx])
+        del beats[0][idx]
+        idx = random.randint(0,numUnsorted-1)
+        trainBeats.append(directory + "/" + beats[1][idx])
+        del beats[1][idx]
+        idx = random.randint(0,numUnsorted-1)
+        trainBeats.append(directory + "/" + beats[2][idx])
+        del beats[2][idx]
+        numUnsorted = numUnsorted - 1
+    for beat in beats:
+        for file in beat:
+            testBeats.append(directory + "/" + file)
+
+    return(trainBeats,testBeats)
+
+def splitDatasetFolds(directory):
+    files = os.listdir(directory)
+    beats = []
+    count = int(len(files)/len(labels))
+    for i in range(0,len(labels)):
+        beats.append(files[i*count:(i+1)*count])
+    splitUpTo = count/nFolds
+    folds = []
+    numUnsorted = count
+    for i in range(0,nFolds):
+        folds.append([[],[],[]])
+        c = 0
+        while numUnsorted > 0 and c < splitUpTo:
+            idx = random.randint(0,numUnsorted-1)
+            folds[i][0].append(directory + "/" + beats[0][idx])
+            del beats[0][idx]
+            idx = random.randint(0,numUnsorted-1)
+            folds[i][1].append(directory + "/" + beats[1][idx])
+            del beats[1][idx]
+            idx = random.randint(0,numUnsorted-1)
+            folds[i][2].append(directory + "/" + beats[2][idx])
+            del beats[2][idx]
+            numUnsorted = numUnsorted - 1
+            c = c + 1
+    if(numUnsorted > 0):
+        for b in beats:
+            for f in b:
+                folds[0].append(f)
+
+    compiledFolds = []
+    for i in range(0,nFolds):
+        compiledFolds.append([])
+        for f in folds[i]:
+            compiledFolds[i].extend(f)
+
+    # Prints
+    print("Folds:")
+    for i in range(0,nFolds):
+        print("Fold #"+str(i)+":")
+        for f in compiledFolds[i]:
+            print(f)
+    
+    return compiledFolds
+
+def loadDataset(dataset):
+    trainingFiles = []
+    trainingLabels = []
+    for file in dataset:
+        trainingFiles.append(convertFile(file))
         
+        label = file.split("/")[1].split("_")[0]
+        idx = labels.index(label)
+        output = []
+        for i in range(len(labels)):
+            if i == idx:
+                output.append(1)
+            else:
+                output.append(0)
+        trainingLabels.append(output)
+    return (trainingFiles, trainingLabels)
+
+def shuffle(datalist):
+    listL = [[],[]]
+    listA = datalist[0]
+    listB = datalist[1]
+    c = list(zip(listA,listB))
+    random.shuffle(c)
+    lisA, listB = zip(*c)
+    listL[0] = listA
+    listL[1] = listB
+    return listL
 
 def main():
     
     nInputNeurons = size*size*size*7
     nOutputNeurons = len(labels)
-    
-    trainingFiles = loadDirectory("train")    
-    testingFiles = loadDirectory("test")
 
-    test_X = np.array(testingFiles[0])
-    test_y = np.array(testingFiles[1])
+    # Basic Version
+    #trainingFiles = loadDirectory("train")    
+    #testingFiles = loadDirectory("test")
 
-    train_X = np.array(trainingFiles[0])
-    train_y = np.array(trainingFiles[1])
-    
-    # Preparing training data (inputs-outputs)  
-    inputs = tf.placeholder(shape=[None, nInputNeurons], dtype=tf.float32)  
-    outputs = tf.placeholder(shape=[None, nOutputNeurons], dtype=tf.float32) #Desired outputs for each input  
-    
-    # Weight initializations
-    w_1 = init_weights((nInputNeurons, nHiddenNeurons))
-    w_2 = init_weights((nHiddenNeurons, nOutputNeurons))
-    
-    # Forward propagation
-    yhat    = forwardprop(inputs, w_1, w_2)
-    predict = tf.argmax(yhat, axis=1)
-    
-    # Backward propagation
-    cost    = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=outputs, logits=yhat))
-    updates = tf.train.GradientDescentOptimizer(0.01).minimize(cost)
-    
-    # Run SGD
-    sess = tf.Session()
-    init = tf.global_variables_initializer()
-    sess.run(init)
-    
-    for epoch in range(nEpochs):
-        # Train with each example
-        for i in range(len(train_X)):
-            sess.run(updates, feed_dict={inputs: train_X[i: i + 1], outputs: train_y[i: i + 1]})
+    # Random Train and Test Split Version
+    #datasets = splitDataset("allData",0.4)
+    #trainingFiles = loadDataset(datasets[0])
+    #testingFiles = loadDataset(datasets[1])
 
-        train_accuracy = np.mean(np.argmax(train_y, axis=1) ==
-                                 sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
+    # Cross-Validation Version
+    datasets = splitDatasetFolds("allData")
+    results = []
+
+    for k in range(0,nFolds):
+
+        print("Loading Testing Files... (Fold #" + str(k)+")")
+        testingFiles = loadDataset(datasets[k])
+        trainingFiles = [[],[]]
+        print("Loading Training Files...")
+        for j in range(0,k):
+            print("Loading Fold #"+str(j))
+            filesAndLabels = loadDataset(datasets[j])
+            trainingFiles[0].extend(filesAndLabels[0])
+            trainingFiles[1].extend(filesAndLabels[1])
+        for j in range(k+1,nFolds):
+            print("Loading Fold #"+str(j))
+            filesAndLabels = loadDataset(datasets[j])
+            trainingFiles[0].extend(filesAndLabels[0])
+            trainingFiles[1].extend(filesAndLabels[1])
+
+        #trainingFiles = shuffle(trainingFiles)
+        #testingFiles = shuffle(testingFiles)
+
+        print("# of Training Files = "+str(len(trainingFiles[0])))
+        print("# of Testing Files = "+str(len(testingFiles[0])))
+
+        test_X = np.array(testingFiles[0])
+        test_y = np.array(testingFiles[1])
+
+        train_X = np.array(trainingFiles[0])
+        train_y = np.array(trainingFiles[1])
+        
+        # Preparing training data (inputs-outputs)  
+        inputs = tf.placeholder(shape=[None, nInputNeurons], dtype=tf.float32)  
+        outputs = tf.placeholder(shape=[None, nOutputNeurons], dtype=tf.float32) #Desired outputs for each input  
+        
+        # Weight initializations
+        w_1 = init_weights((nInputNeurons, nHiddenNeurons))
+        w_2 = init_weights((nHiddenNeurons, nOutputNeurons))
+        
+        # Forward propagation
+        yhat    = forwardprop(inputs, w_1, w_2)
+        predict = tf.argmax(yhat, axis=1)
+        
+        # Backward propagation
+        cost    = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=outputs, logits=yhat))
+        updates = tf.train.GradientDescentOptimizer(0.01).minimize(cost)
+        
+        # Run SGD
+        sess = tf.Session()
+        init = tf.global_variables_initializer()
+        sess.run(init)
+        print("Initial Results:")
+        print(sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
+        print("Should have been:")
+        print(train_y)
         test_accuracy = 0
-        test_accuracy  = np.mean(np.argmax(test_y, axis=1) ==
-                                 sess.run(predict, feed_dict={inputs: test_X, outputs: test_y}))
+        for epoch in range(nEpochs):
+            # Train with each example
+            for i in range(len(train_X)):
+                sess.run(updates, feed_dict={inputs: train_X[i: i + 1], outputs: train_y[i: i + 1]})
 
-        print("Epoch = %d, train accuracy = %.2f%%, test accuracy = %.2f%%"
-              % (epoch + 1, 100. * train_accuracy, 100. * test_accuracy))
+            train_accuracy = np.mean(np.argmax(train_y, axis=1) ==
+                                     sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
+            test_accuracy  = np.mean(np.argmax(test_y, axis=1) ==
+                                     sess.run(predict, feed_dict={inputs: test_X, outputs: test_y}))
 
-    print(sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
-    print(sess.run(predict, feed_dict={inputs: test_X, outputs: test_y}))
+            print("Epoch = %d, train accuracy = %.2f%%, test accuracy = %.2f%%"
+                  % (epoch + 1, 100. * train_accuracy, 100. * test_accuracy))
 
-    sess.close()
+        print("Training Results:")
+        print(sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
+        print("Should have been:")
+        print(train_y)
+        print("Testing Results:")
+        print(sess.run(predict, feed_dict={inputs: test_X, outputs: test_y}))
+        print("Should have been:")
+        print(test_y)
+        sess.close()
 
+        results.append(test_accuracy)
 
+    print("Results:")
+    total = 0
+    for r in results:
+        print(str(r*100)+"%")
+        total = total + r
+    print("Avr = " + str(total/nFolds*100) + "%")
 
 main()
