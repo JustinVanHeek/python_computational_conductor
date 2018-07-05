@@ -11,9 +11,13 @@ brushRadius     =   4       # Radius that values are applied to the 3D image fro
 nHiddenNeurons  =   400     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
 nEpochs         =   25      # Number of training epochs for the neural network, larger = usually better accuracy
 labels          =   ["beat2","beat3","beat4"]        # Labels of the gestures to recognize (Note: training files should have the naming convention of [labelname]_##.csv
+<<<<<<< HEAD
+
+=======
 maxSpeed        =   1000    # Maximum speed for normalization of the speed value
 iterPerSecond   =   0.025   # Speed at which the data is being recorded
 nFolds          =   3       # Number of cross validation folds
+>>>>>>> 77b7c8ae64e8e8c5132ac0f3a5c1133748cf2dee
 
 def loadPositionFile(fileName):
     #print("Loading file " + fileName)
@@ -166,10 +170,14 @@ def convertFile(inputFile):
         oneLineImage.append(x)
     for x in np.nditer(imageBack):
         oneLineImage.append(x)
+<<<<<<< HEAD
+    return oneLineImage
+=======
     for x in np.nditer(imageSpeed):
         oneLineImage.append(x)
 
     return oneLineImage 
+>>>>>>> 77b7c8ae64e8e8c5132ac0f3a5c1133748cf2dee
 
 
 
@@ -206,7 +214,7 @@ def loadDirectory(path):
     for file in files:
         trainingFiles.append(convertFile(path+"/"+file))
         #trainingFiles.append(loadFile(path+"/"+file))
-        
+
         label = file.split("_")[0]
         idx = labels.index(label)
         output = []
@@ -227,6 +235,17 @@ def convertDirectory(pathFrom, pathTo):
             for item in data[:-1]:
                 file.write(str(item)+",")
             file.write(str(data[-1])+"\n")
+<<<<<<< HEAD
+
+
+def main():
+
+    nInputNeurons = size*size*size*6
+    nOutputNeurons = len(labels)
+
+    trainingFiles = loadDirectory("train")
+    testingFiles = loadDirectory("test")
+=======
 
 def splitDataset(directory, percent):
     files = os.listdir(directory)
@@ -315,6 +334,7 @@ def loadDataset(dataset):
                 output.append(0)
         trainingLabels.append(output)
     return (trainingFiles, trainingLabels)
+>>>>>>> 77b7c8ae64e8e8c5132ac0f3a5c1133748cf2dee
 
 def shuffle(datalist):
     listL = [[],[]]
@@ -327,10 +347,41 @@ def shuffle(datalist):
     listL[1] = listB
     return listL
 
+<<<<<<< HEAD
+    train_X = np.array(trainingFiles[0])
+    train_y = np.array(trainingFiles[1])
+
+    # Preparing training data (inputs-outputs)
+    inputs = tf.placeholder(shape=[None, nInputNeurons], dtype=tf.float32)
+    outputs = tf.placeholder(shape=[None, nOutputNeurons], dtype=tf.float32) #Desired outputs for each input
+
+    # Weight initializations
+    w_1 = init_weights((nInputNeurons, nHiddenNeurons))
+    w_2 = init_weights((nHiddenNeurons, nOutputNeurons))
+
+    # Forward propagation
+    yhat    = forwardprop(inputs, w_1, w_2)
+    predict = tf.argmax(yhat, axis=1)
+
+    # Backward propagation
+    cost    = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=outputs, logits=yhat))
+    updates = tf.train.GradientDescentOptimizer(0.01).minimize(cost)
+
+    # Run SGD
+    sess = tf.Session()
+    init = tf.global_variables_initializer()
+    sess.run(init)
+
+    for epoch in range(nEpochs):
+        # Train with each example
+        for i in range(len(train_X)):
+            sess.run(updates, feed_dict={inputs: train_X[i: i + 1], outputs: train_y[i: i + 1]})
+=======
 def main():
     
     nInputNeurons = size*size*size*7
     nOutputNeurons = len(labels)
+>>>>>>> 77b7c8ae64e8e8c5132ac0f3a5c1133748cf2dee
 
     # Basic Version
     #trainingFiles = loadDirectory("train")    
