@@ -9,7 +9,7 @@ brushRadius     =   4       # Radius that values are applied to the 3D image fro
 nHiddenNeurons  =   100     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
 nEpochs         =   20      # Number of training epochs for the neural network, larger = usually better accuracy
 labels          =   ["beat2","beat3","beat4"]        # Labels of the gestures to recognize (Note: training files should have the naming convention of [labelname]_##.csv
-                    
+
 
 def loadPositionFile(fileName):
     print("Loading file " + fileName)
@@ -140,7 +140,7 @@ def convertFile(inputFile):
         oneLineImage.append(x)
     for x in np.nditer(imageBack):
         oneLineImage.append(x)
-    return oneLineImage 
+    return oneLineImage
 
 
 
@@ -177,7 +177,7 @@ def loadDirectory(path):
     for file in files:
         trainingFiles.append(convertFile(path+"/"+file))
         #trainingFiles.append(loadFile(path+"/"+file))
-        
+
         label = file.split("_")[0]
         idx = labels.index(label)
         output = []
@@ -198,14 +198,14 @@ def convertDirectory(pathFrom, pathTo):
             for item in data[:-1]:
                 file.write(str(item)+",")
             file.write(str(data[-1])+"\n")
-        
+
 
 def main():
-    
+
     nInputNeurons = size*size*size*6
     nOutputNeurons = len(labels)
-    
-    trainingFiles = loadDirectory("train")    
+
+    trainingFiles = loadDirectory("train")
     testingFiles = loadDirectory("test")
 
     test_X = np.array(testingFiles[0])
@@ -213,28 +213,28 @@ def main():
 
     train_X = np.array(trainingFiles[0])
     train_y = np.array(trainingFiles[1])
-    
-    # Preparing training data (inputs-outputs)  
-    inputs = tf.placeholder(shape=[None, nInputNeurons], dtype=tf.float32)  
-    outputs = tf.placeholder(shape=[None, nOutputNeurons], dtype=tf.float32) #Desired outputs for each input  
-    
+
+    # Preparing training data (inputs-outputs)
+    inputs = tf.placeholder(shape=[None, nInputNeurons], dtype=tf.float32)
+    outputs = tf.placeholder(shape=[None, nOutputNeurons], dtype=tf.float32) #Desired outputs for each input
+
     # Weight initializations
     w_1 = init_weights((nInputNeurons, nHiddenNeurons))
     w_2 = init_weights((nHiddenNeurons, nOutputNeurons))
-    
+
     # Forward propagation
     yhat    = forwardprop(inputs, w_1, w_2)
     predict = tf.argmax(yhat, axis=1)
-    
+
     # Backward propagation
     cost    = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=outputs, logits=yhat))
     updates = tf.train.GradientDescentOptimizer(0.01).minimize(cost)
-    
+
     # Run SGD
     sess = tf.Session()
     init = tf.global_variables_initializer()
     sess.run(init)
-    
+
     for epoch in range(nEpochs):
         # Train with each example
         for i in range(len(train_X)):
