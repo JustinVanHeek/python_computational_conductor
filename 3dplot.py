@@ -8,8 +8,8 @@ import matplotlib.image as mpimg
 
 import numpy as np
 #tool.set_credentials_file(username='3ddata', api_key='MKkafWD9f4yeo19aA9pj')
-tool.set_credentials_file(username='3ddata2', api_key='BRJtXyACquN0h3Q1gluJ')
-
+#tool.set_credentials_file(username='3ddata2', api_key='BRJtXyACquN0h3Q1gluJ')
+tool.set_credentials_file(username='jackp7640', api_key='i702mHpw4RSKJy5oFAkf')
 graphs = os.listdir("graphs")
 
 def loadPositionFile(fileName):
@@ -75,7 +75,7 @@ def graph(path, fileName):
     #plt.show()
 
 def main():
-    path = "allData"
+    path = "allData1"
     files = os.listdir(path)
     for file in files:
         graph(path,file)
