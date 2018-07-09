@@ -305,7 +305,7 @@ def loadDataset(dataset):
     for file in dataset:
         trainingFiles.append(convertFile(file))
         
-        label = file.split("/")[1].split("_")[0]
+        label = file.split("/")[1].split("_")[0] + "_" + file.split("/")[1].split("_")[1]
         idx = labels.index(label)
         output = []
         for i in range(len(labels)):
