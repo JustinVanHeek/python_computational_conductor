@@ -10,7 +10,7 @@ size            =   50      # Length of each dimension of the 3D image, larger =
 brushRadius     =   4       # Radius that values are applied to the 3D image from source point, larger = more generalized
 nHiddenNeurons  =   400     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
 nEpochs         =   20      # Number of training epochs for the neural network, larger = usually better accuracy
-labels          =   ["beat2","beat3","beat4"]        # Labels of the gestures to recognize (Note: training files should have the naming convention of [labelname]_##.csv
+labels          =   ["beat2_n","beat2_s","beat2_l","beat3_n","beat3_s","beat3_l","beat4_n","beat4_s","beat4_l"]        # Labels of the gestures to recognize (Note: training files should have the naming convention of [labelname]_[articulation (n,s, or l)]_##.csv 
 maxSpeed        =   1000    # Maximum speed for normalization of the speed value
 iterPerSecond   =   0.025   # Speed at which the data is being recorded
 nFolds          =   3       # Number of cross validation folds
