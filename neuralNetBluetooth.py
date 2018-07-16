@@ -5,25 +5,33 @@ import math
 import random
 import _thread as thread
 import time
+import glob
+import matplotlib.pyplot as plt
 from bluetooth import *
 from sklearn.model_selection import train_test_split
+from mpl_toolkits.mplot3d import axes3d, Axes3D #<-- Note the capitalization! 
+
 
 # Main Settings
 size            =   50      # Length of each dimension of the 3D image, larger = more detailed gestures
 brushRadius     =   4       # Radius that values are applied to the 3D image from source point, larger = more generalized
-nHiddenNeurons  =   400     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
-nEpochs         =   20      # Number of training epochs for the neural network, larger = usually better accuracy
+nHiddenNeurons  =   500     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
+nEpochs         =   30      # Number of training epochs for the neural network, larger = usually better accuracy
 labels          =   ["beat2","beat3","beat4"]        # Labels of the gestures to recognize (Note: training files should have the naming convention of [labelname]_##.csv
 iterPerSecond   =   0.025   # Speed at which the data is being recorded
 nFolds          =   3       # Number of cross validation folds
-windowSize      =   100     # Number of lines of positional data that are kept recorded
+windowSize      =   60      # Number of lines of positional data that are kept recorded
+detailedEpochs  =   False
 
 # Global Variables
 
 listOfPositions = []        # The recorded positional data
 runProgram = True           # Flag to run the main bluetooth data recording & prediction loops
-
-
+plt.ion()
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+#graph, = ax.scatter([],[],[])
+ax.plot([],[],[])
 def loadPositionFile(fileName):
     #print("Loading file " + fileName)
     lines = [line.rstrip('\n') for line in open(fileName)]
@@ -32,7 +40,8 @@ def loadPositionFile(fileName):
         items = line.split(",")
         pos = []
         for item in items:
-            pos.append(float(item))
+            if len(item) > 0:
+                pos.append(float(item))
         data.append(pos)
     return data
 
@@ -203,7 +212,7 @@ def Convert(positionData):
 
     return oneLineImage 
 def convertFile(inputFile):
-    print('Converting file '+inputFile)
+    #print('Converting file '+inputFile)
     positionData = loadPositionFile(inputFile)
     return Convert(positionData)
 
@@ -363,6 +372,25 @@ def shuffle(datalist):
     listL[1] = listB
     return listL
 
+def LoadData(fileName):
+    return convertFile(fileName)
+
+def LoadResult(fileName):
+    label = fileName.split("/")[1].split("_")[0]
+    idx = labels.index(label)
+    output = []
+    for i in range(len(labels)):
+        if i == idx:
+            output.append(1)
+        else:
+            output.append(0)
+    return output
+
+def LoadIdx(fileName):
+    label = fileName.split("/")[1].split("_")[0]
+    idx = labels.index(label)
+    return idx
+
 def test():
     
     nInputNeurons = size*size*size*7
@@ -379,39 +407,30 @@ def test():
 
     # Cross-Validation Version
     datasets = splitDatasetFolds("allData")
+    print(len(datasets))
     results = []
 
     for k in range(0,nFolds):
 
         print("Loading Testing Files... (Fold #" + str(k)+")")
-        testingFiles = loadDataset(datasets[k])
-        trainingFiles = [[],[]]
+        testingFiles = datasets[k]
+        trainingFiles = []
         print("Loading Training Files...")
         for j in range(0,k):
             print("Loading Fold #"+str(j))
-            filesAndLabels = loadDataset(datasets[j])
-            trainingFiles[0].extend(filesAndLabels[0])
-            print("# of Training Files = "+str(len(trainingFiles[0])))
-            trainingFiles[1].extend(filesAndLabels[1])
+            trainingFiles.extend(datasets[j])
+            print("# of Training Files = "+str(len(trainingFiles)))
         for j in range(k+1,nFolds):
             print("Loading Fold #"+str(j))
-            filesAndLabels = loadDataset(datasets[j])
-            trainingFiles[0].extend(filesAndLabels[0])
-            print("# of Training Files = "+str(len(trainingFiles[0])))
-            trainingFiles[1].extend(filesAndLabels[1])
+            trainingFiles.extend(datasets[j])
+            print("# of Training Files = "+str(len(trainingFiles)))
 
         #trainingFiles = shuffle(trainingFiles)
         #testingFiles = shuffle(testingFiles)
 
-        print("# of Training Files = "+str(len(trainingFiles[0])))
-        print("# of Testing Files = "+str(len(testingFiles[0])))
+        print("# of Training Files = "+str(len(trainingFiles)))
+        print("# of Testing Files = "+str(len(testingFiles)))
 
-        test_X = np.array(testingFiles[0])
-        test_y = np.array(testingFiles[1])
-
-        train_X = np.array(trainingFiles[0])
-        train_y = np.array(trainingFiles[1])
-        
         # Preparing training data (inputs-outputs)  
         inputs = tf.placeholder(shape=[None, nInputNeurons], dtype=tf.float32)  
         outputs = tf.placeholder(shape=[None, nOutputNeurons], dtype=tf.float32) #Desired outputs for each input  
@@ -432,35 +451,83 @@ def test():
         sess = tf.Session()
         init = tf.global_variables_initializer()
         sess.run(init)
-        print("Initial Results:")
-        print(sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
-        print("Should have been:")
-        print(train_y)
         test_accuracy = 0
+        test_results = []
+        test_correct = []
+        train_results = []
+        train_correct = []
         for epoch in range(nEpochs):
             # Train with each example
-            for i in range(len(train_X)):
-                sess.run(updates, feed_dict={inputs: train_X[i: i + 1], outputs: train_y[i: i + 1]})
+            print("Epoch Progress: 0___________________100")
+            print("                ", end='')
+            l = len(trainingFiles)
+            for i in range(l):
+                if(i%int(l*0.05)) == 0:
+                    print("#", end='')
+                sess.run(updates, feed_dict={inputs: [LoadData(trainingFiles[i])], outputs: [LoadResult(trainingFiles[i])]})
+                
 
-            train_accuracy = np.mean(np.argmax(train_y, axis=1) ==
-                                     sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
-            test_accuracy  = np.mean(np.argmax(test_y, axis=1) ==
-                                     sess.run(predict, feed_dict={inputs: test_X, outputs: test_y}))
+            print(" Done epoch.")
 
-            print("Epoch = %d, train accuracy = %.2f%%, test accuracy = %.2f%%"
-                  % (epoch + 1, 100. * train_accuracy, 100. * test_accuracy))
+            if detailedEpochs:
+                #train_accuracy = np.mean(np.argmax(train_y, axis=1) ==
+                #                         sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
+                train_accuracy = 0
+                for i in range(len(trainingFiles)):
+                    r = sess.run(predict, feed_dict={inputs: [LoadData(trainingFiles[i])], outputs: [LoadResult(trainingFiles[i])]})
+                    train_results.append(r[0])
+                    c = LoadIdx(trainingFiles[i])
+                    train_correct.append(c)
+                    if r[0] == c:
+                        train_accuracy = train_accuracy + 1
+                train_accuracy = train_accuracy / len(trainingFiles)
 
-        print("Training Results:")
-        print(sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
+                test_accuracy = 0
+                for i in range(len(testingFiles)):
+                    r = sess.run(predict, feed_dict={inputs: [LoadData(testingFiles[i])], outputs: [LoadResult(testingFiles[i])]})
+                    test_results.append(r[0])
+                    c = LoadIdx(testingFiles[i])
+                    test_correct.append(c)
+                    if r[0] == c:
+                        test_accuracy = test_accuracy + 1
+                test_accuracy = test_accuracy / len(testingFiles)    
+                        
+                #test_accuracy  = np.mean(np.argmax(test_y, axis=1) ==
+                #                         sess.run(predict, feed_dict={inputs: test_X, outputs: test_y}))
+
+                print("Epoch = %d, train accuracy = %.2f%%, test accuracy = %.2f%%"
+                      % (epoch + 1, 100. * train_accuracy, 100. * test_accuracy))
+
+        train_accuracy = 0
+        for i in range(len(trainingFiles)):
+            r = sess.run(predict, feed_dict={inputs: [LoadData(trainingFiles[i])], outputs: [LoadResult(trainingFiles[i])]})
+            train_results.append(r[0])
+            c = LoadIdx(trainingFiles[i])
+            train_correct.append(c)
+            if r[0] == c:
+                train_accuracy = train_accuracy + 1
+        train_accuracy = train_accuracy / len(trainingFiles)
+
+        test_accuracy = 0
+        for i in range(len(testingFiles)):
+            r = sess.run(predict, feed_dict={inputs: [LoadData(testingFiles[i])], outputs: [LoadResult(testingFiles[i])]})
+            test_results.append(r[0])
+            c = LoadIdx(testingFiles[i])
+            test_correct.append(c)
+            if r[0] == c:
+                test_accuracy = test_accuracy + 1
+        test_accuracy = test_accuracy / len(testingFiles)   
+        print("Training Results: " + str(train_accuracy))
+        print(train_results)
         print("Should have been:")
-        print(train_y)
-        print("Testing Results:")
-        print(sess.run(predict, feed_dict={inputs: test_X, outputs: test_y}))
+        print(train_correct)
+        print("Testing Results: "+ str(test_accuracy))
+        print(test_results)
         print("Should have been:")
-        print(test_y)
+        print(test_correct)
         sess.close()
 
-        results.append(test_accuracy)
+        #results.append(test_accuracy)
 
     print("Results:")
     total = 0
@@ -472,13 +539,15 @@ def test():
 def CreateModel():
     nInputNeurons = size*size*size*7
     nOutputNeurons = len(labels)
-    trainingFiles = loadDirectory("allData")    
+    files = os.listdir("allData")
+    trainingFiles = []
+    for f in files:
+        trainingFiles.append("allData/"+f)
+  
 
 
-    print("# of Training Files = "+str(len(trainingFiles[0])))
+    print("# of Training Files = "+str(len(trainingFiles)))
 
-    train_X = np.array(trainingFiles[0])
-    train_y = np.array(trainingFiles[1])
         
     # Preparing training data (inputs-outputs)  
     inputs = tf.placeholder(shape=[None, nInputNeurons], dtype=tf.float32)  
@@ -502,48 +571,103 @@ def CreateModel():
     init = tf.global_variables_initializer()
     sess.run(init)
     print("Initial Results:")
-    print(sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
     print("Should have been:")
-    print(train_y)
+    start = time.time()
+    timeRecorded = False
     for epoch in range(nEpochs):
         # Train with each example
-        for i in range(len(train_X)):
-            sess.run(updates, feed_dict={inputs: train_X[i: i + 1], outputs: train_y[i: i + 1]})
+        for i in range(len(trainingFiles)):
+                sess.run(updates, feed_dict={inputs: [LoadData(trainingFiles[i])], outputs: [LoadResult(trainingFiles[i])]})
 
-        train_accuracy = np.mean(np.argmax(train_y, axis=1) ==
-                                    sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
+        train_accuracy = 0
+        for i in range(len(trainingFiles)):
+            r = sess.run(predict, feed_dict={inputs: [LoadData(trainingFiles[i])], outputs: [LoadResult(trainingFiles[i])]})
+            if r[0] == LoadIdx(trainingFiles[i]):
+                train_accuracy = train_accuracy + 1
+        train_accuracy = train_accuracy / len(trainingFiles)
+        #train_accuracy = np.mean(np.argmax(train_y, axis=1) ==
+        #                            sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
             
         print("Epoch = %d, train accuracy = %.2f%%"
                 % (epoch + 1, 100. * train_accuracy))
+        if not timeRecorded:
+            timeRecorded = True
+            end = time.time()
+        remainingTime = (end - start)*(nEpochs-epoch)/60
+        print(str(remainingTime) + " minutes remaining")
+        
 
-    print("Training Results:")
-    print(sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
-    print("Should have been:")
-    print(train_y)
+    #print("Training Results:")
+    #print(sess.run(predict, feed_dict={inputs: train_X, outputs: train_y}))
+    #print("Should have been:")
+    #print(train_y)
 
     save_path = saver.save(sess, "/models/model.ckpt")
     print("Model saved in path: %s" % save_path)
     sess.close()
     
 def BluetoothMethod():
-    server_socket=BluetoothSocket( RFCOMM )
-    server_socket.bind(("", 3 ))
-    print("Waiting for a connection...")
-    server_socket.listen(1)
+    server_sock = BluetoothSocket( RFCOMM )
+    server_sock.bind(("",PORT_ANY))
+    server_sock.listen(1)
 
-    client_socket, address = server_socket.accept()
-    print("Connected to " + address)
+    port = server_sock.getsockname()[1]
 
-    while runProgram:
-        data = client_socket.recv(1024)
-        print("received [%s]" % data)
-        data_split = data.split(",")
-        listOfPositions.append([float(data_split[0]),float(data_split[1]),float(data_split[2])])
-        if len(listOfPositions) > windowSize:
-            del listOfPositions[0]
+    uuid = "94f39d29-7d6d-437d-973b-fba39e49d4ee"
 
-    client_socket.close()
-    server_socket.close()
+    advertise_service( server_sock, "TestServer",
+                       service_id = uuid,
+                       service_classes = [ uuid, SERIAL_PORT_CLASS ],
+                       profiles = [ SERIAL_PORT_PROFILE ], 
+    #                   protocols = [ OBEX_UUID ] 
+                        )
+
+    print("Waiting for connection on RFCOMM channel %d" % port)
+    client_sock, client_info = server_sock.accept()
+    print("Accepted connection from ", client_info)
+
+    while runProgram:          
+
+        try:
+            req = client_sock.recv(1024)
+            if len(req) == 0:
+                break
+            #print("received [%s]" % req)
+            messages = req.decode("utf-8")
+            #print(messages)
+            messages = messages.split("END")
+            for message in messages:
+                if len(message) > 0:
+                    messageSplit = message.split(",")
+                    pos = [float(messageSplit[0]),float(messageSplit[1]),float(messageSplit[2])]
+                    #print("Adding " + str(pos) + " to list")
+                    listOfPositions.append(pos)
+                    del listOfPositions[0]
+
+
+            data = None
+            if req in ('temp', '*temp'):
+                data = str(random.random())+'!'
+            else:
+                pass
+
+            if data:
+                print("sending [%s]" % data)
+                client_sock.send()
+
+        except IOError:
+            pass
+
+        except KeyboardInterrupt:
+
+            print("disconnected")
+
+            client_sock.close()
+            server_sock.close()
+            print("all done")
+
+            break
+
 
 
 def RunProgram():
@@ -581,12 +705,111 @@ def RunProgram():
     thread.start_new_thread(BluetoothMethod, ())
     while runProgram:
         posData = listOfPositions.copy()
+        SavePosData()
         data = []
         data.append(Convert(posData))
         out = sess.run(predict, feed_dict={inputs: data, outputs: [[1,0,0]]})
-        print(out)
+
+        print("Predicted gesture is " + labels[out[0]])
     
     sess.close()
+
+fileNum = 0
+def SavePosData():
+    global fileNum
+    posData = listOfPositions.copy()
+    with open("posdata/position_data_"+str(fileNum), "w") as savefile:
+        for line in posData:
+            for item in line:
+                savefile.write(str(item)+",")
+            savefile.write("\n")
+    fileNum = fileNum + 1
+    UpdatePlot()
+
+def UpdatePlot():
+    global graph
+    posData = listOfPositions.copy()
+    x = []
+    y = []
+    z = []
+    minX = 0
+    minY = 0
+    minZ = 0
+    maxX = 0
+    maxY = 0
+    maxZ = 0
+    for line in posData:
+        x.append(line[0])
+        y.append(line[1])
+        z.append(line[2])
+        if line[0] < minX:
+            minX = line[0]
+        if line[0] > maxX:
+            maxX = line[0]
+        if line[1] < minY:
+            minY = line[1]
+        if line[1] > maxY:
+            maxY = line[1]
+        if line[2] < minZ:
+            minZ = line[2]
+        if line[2] > maxZ:
+            maxZ = line[2]
+    #graph.set_xdata(x)
+    #graph.set_ydata(y)
+    #graph.set_zdata(z)
+
+    plt.cla()
+    ax.set_xlim([minX, maxX])
+    ax.set_ylim([minZ, maxZ])
+    ax.set_zlim([minY, maxY])
+    ax.plot(x,z,y)
+
+    ax.relim()
+    ax.autoscale_view()
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+
+    #plt.draw()
+    #plt.pause(0.5)
+
+def TestModel():
+
+    # Load Model
+    tf.reset_default_graph()
+    nInputNeurons = size*size*size*7
+    nOutputNeurons = len(labels)
+    
+    # Preparing training data (inputs-outputs)  
+    inputs = tf.placeholder(shape=[None, nInputNeurons], dtype=tf.float32)  
+    outputs = tf.placeholder(shape=[None, nOutputNeurons], dtype=tf.float32) #Desired outputs for each input  
+        
+    # Weight initializations
+    w_1 = init_weights((nInputNeurons, nHiddenNeurons))
+    w_2 = init_weights((nHiddenNeurons, nOutputNeurons))
+        
+    # Forward propagation
+    yhat    = forwardprop(inputs, w_1, w_2)
+    predict = tf.argmax(yhat, axis=1)
+        
+    # Backward propagation
+    cost    = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=outputs, logits=yhat))
+    updates = tf.train.GradientDescentOptimizer(0.01).minimize(cost)
+    saver = tf.train.Saver()
+    
+    sess = tf.Session()
+    saver.restore(sess, "/models/model.ckpt")
+
+
+    # Run program
+    files = os.listdir("test")
+    for file in files:
+        data = Convert(loadPositionFile("test/"+file))
+        out = sess.run(predict, feed_dict={inputs: [data], outputs: [[1,0,0]]})
+
+        print("Predicted gesture is " + labels[out[0]])
+    
+    sess.close()
+
 
 def Main():
     command = input("Enter command: ")
@@ -594,6 +817,8 @@ def Main():
         CreateModel()
     elif command == "run":
         RunProgram()
+    elif command == "testload":
+        TestModel()
     elif command == "test":
         test()
 
