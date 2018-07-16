@@ -75,7 +75,7 @@ def graph(path, fileName):
     #plt.show()
 
 def main():
-    path = "allData1"
+    path = "posdata"
     files = os.listdir(path)
     for file in files:
         graph(path,file)
