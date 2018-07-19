@@ -74,13 +74,14 @@ def graph(path, fileName):
     plt.imshow(img)
     #plt.show()
 
+def PlotGraph(path,file):
+    graph(path,file)
+    f = plt.figure(file)
+    f.show()
+
 def main():
     path = "posdata"
     files = os.listdir(path)
     for file in files:
-        graph(path,file)
-        f = plt.figure(file)
-        f.show()
+        PlotGraph(file)
     input("Press Enter to Close Program: ")
-
-main()
