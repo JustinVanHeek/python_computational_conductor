@@ -15,7 +15,7 @@ from mpl_toolkits.mplot3d import axes3d, Axes3D #<-- Note the capitalization!
 # Main Settings
 size            =   50      # Length of each dimension of the 3D image, larger = more detailed gestures
 brushRadius     =   4       # Radius that values are applied to the 3D image from source point, larger = more generalized
-nHiddenNeurons  =   500     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
+nHiddenNeurons  =   400     # Number of hidden neurons in the neural network, larger = usually better at recognizing more details
 nEpochs         =   30      # Number of training epochs for the neural network, larger = usually better accuracy
 labels          =   ["beat2","beat3","beat4"]        # Labels of the gestures to recognize (Note: training files should have the naming convention of [labelname]_##.csv
 iterPerSecond   =   0.025   # Speed at which the data is being recorded
@@ -25,8 +25,14 @@ detailedEpochs  =   False
 
 # Global Variables
 
+currentBeat = []
 listOfPositions = []        # The recorded positional data
 runProgram = True           # Flag to run the main bluetooth data recording & prediction loops
+nPosLines = 0
+testedCurrentBeat = False
+loadedFile = []
+loaded = False
+
 plt.ion()
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
@@ -375,6 +381,11 @@ def shuffle(datalist):
 def LoadData(fileName):
     return convertFile(fileName)
 
+def LoadDataThread(fileName):
+    global loadedFile, loaded
+    loadedFile = convertFile(fileName)
+    loaded = True
+
 def LoadResult(fileName):
     label = fileName.split("/")[1].split("_")[0]
     idx = labels.index(label)
@@ -537,6 +548,7 @@ def test():
     print("Avr = " + str(total/nFolds*100) + "%")
 
 def CreateModel():
+    global loaded
     nInputNeurons = size*size*size*7
     nOutputNeurons = len(labels)
     files = os.listdir("allData")
@@ -576,8 +588,24 @@ def CreateModel():
     timeRecorded = False
     for epoch in range(nEpochs):
         # Train with each example
+        first = True
+        d = []
         for i in range(len(trainingFiles)):
-                sess.run(updates, feed_dict={inputs: [LoadData(trainingFiles[i])], outputs: [LoadResult(trainingFiles[i])]})
+            startT = time.time()
+            d = LoadData(trainingFiles[i])
+            #if first:
+            #    d = LoadData(trainingFiles[i])
+            #    first = False
+            #else:
+            #    while True:
+            #        if loaded:
+            #            d = loadedFile.copy()
+            #            loaded = False
+            #            break
+            #thread.start_new_thread(LoadDataThread, (trainingFiles[i+1],))
+            sess.run(updates, feed_dict={inputs: [d], outputs: [LoadResult(trainingFiles[i])]})
+            endT = time.time()
+            print(str(endT-startT) + " seconds to load and train")
 
         train_accuracy = 0
         for i in range(len(trainingFiles)):
@@ -607,6 +635,7 @@ def CreateModel():
     sess.close()
     
 def BluetoothMethod():
+    global listOfPositions, currentBeat, testedCurrentBeat
     server_sock = BluetoothSocket( RFCOMM )
     server_sock.bind(("",PORT_ANY))
     server_sock.listen(1)
@@ -626,6 +655,7 @@ def BluetoothMethod():
     client_sock, client_info = server_sock.accept()
     print("Accepted connection from ", client_info)
 
+
     while runProgram:          
 
         try:
@@ -634,15 +664,24 @@ def BluetoothMethod():
                 break
             #print("received [%s]" % req)
             messages = req.decode("utf-8")
-            #print(messages)
-            messages = messages.split("END")
+            #print("RECIEVED: " + messages)
+            messages = messages.split("BEAT")
+            if len(messages) > 1:
+                # Its a new beat so remove all old data
+                currentBeat = listOfPositions.copy()
+                testedCurrentBeat = False
+                listOfPositions = []
+                print("New Beat")
             for message in messages:
                 if len(message) > 0:
-                    messageSplit = message.split(",")
-                    pos = [float(messageSplit[0]),float(messageSplit[1]),float(messageSplit[2])]
-                    #print("Adding " + str(pos) + " to list")
-                    listOfPositions.append(pos)
-                    del listOfPositions[0]
+                    message = message.split("END")
+                    for m in message:
+                        if len(m) > 0:
+                            messageSplit = m.split(",")
+                            pos = [float(messageSplit[0]),float(messageSplit[1]),float(messageSplit[2])]
+                            listOfPositions.append(pos)
+                            if len(listOfPositions) > windowSize:
+                                del listOfPositions[0]
 
 
             data = None
@@ -671,6 +710,7 @@ def BluetoothMethod():
 
 
 def RunProgram():
+    global testedCurrentBeat
 
     # Load Model
     tf.reset_default_graph()
@@ -700,35 +740,56 @@ def RunProgram():
 
     # Run program
     
-    for i in range(windowSize):
-        listOfPositions.append([0,0,0])
+    #for i in range(windowSize):
+    #    listOfPositions.append([0,0,0])
     thread.start_new_thread(BluetoothMethod, ())
+    lastThreePredictions = [0,0,0]
     while runProgram:
-        posData = listOfPositions.copy()
-        SavePosData()
+        posData = []
+        if testedCurrentBeat:
+            posData = listOfPositions.copy()
+        else:
+            posData = currentBeat.copy()
+            testedCurrentBeat = True
+        SavePosData(posData)
         data = []
         data.append(Convert(posData))
         out = sess.run(predict, feed_dict={inputs: data, outputs: [[1,0,0]]})
 
-        print("Predicted gesture is " + labels[out[0]])
+        #print("Predicted gesture is " + labels[out[0]])
+        lastThreePredictions.append(out[0])
+        del lastThreePredictions[0]
+
+        classes = []
+        for i in range(len(labels)):
+            classes.append(0)
+        classes[lastThreePredictions[0]] = classes[lastThreePredictions[0]] + 1
+        classes[lastThreePredictions[1]] = classes[lastThreePredictions[1]] + 1
+        classes[lastThreePredictions[2]] = classes[lastThreePredictions[2]] + 1
+        mostLikely = 0
+        mostLikelyValue = 0
+        for i in range(len(classes)):
+            if classes[i] > mostLikelyValue:
+                mostLikelyValue = classes[i]
+                mostLikely = i
+        print("Predicted gesture is " + labels[mostLikely])
+
     
     sess.close()
 
 fileNum = 0
-def SavePosData():
+def SavePosData(posData):
     global fileNum
-    posData = listOfPositions.copy()
     with open("posdata/position_data_"+str(fileNum), "w") as savefile:
         for line in posData:
             for item in line:
                 savefile.write(str(item)+",")
             savefile.write("\n")
     fileNum = fileNum + 1
-    UpdatePlot()
+    UpdatePlot(posData)
 
-def UpdatePlot():
+def UpdatePlot(posData):
     global graph
-    posData = listOfPositions.copy()
     x = []
     y = []
     z = []
@@ -821,5 +882,9 @@ def Main():
         TestModel()
     elif command == "test":
         test()
+    elif command == "bluetooth":
+        thread.start_new_thread(BluetoothMethod, ())
+        while runProgram:
+            SavePosData()
 
 Main()
